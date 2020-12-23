@@ -1,8 +1,6 @@
 <?php
 
-
 namespace NickFairchild\Installer\Console;
-
 
 use RuntimeException;
 use Symfony\Component\Console\Command\Command;
@@ -32,7 +30,7 @@ class NewCommand extends Command
 
         $directory = $name !== '.' ? getcwd().'/'.$name : '.';
 
-        $version = $this->getVersion();
+        $version = $this->getVersion($input);
 
         if (! $input->getOption('force')) {
             $this->verifyApplicationDoesntExist($directory);

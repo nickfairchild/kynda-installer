@@ -170,7 +170,7 @@ class NewCommand extends Command
         return $process;
     }
 
-    protected function replaceInFile(string $search, string $replace, string $file): string
+    protected function replaceInFile(string $search, string $replace, string $file): void
     {
         file_put_contents(
             $file,

@@ -60,9 +60,9 @@ class NewCommand extends Command
             if ($name !== '.') {
                 $this->updateEnv($directory, $name);
 
-                $this->updateDeployScript($input, $output, $directory, $name);
+                $this->updateDeployScript($directory, $name, $input, $output);
 
-                $this->installWordpress($input, $output, $name);
+                $this->installWordpress($directory, $name, $input, $output);
 
                 $this->setupTheme($name, $input, $output);
             }
@@ -73,7 +73,7 @@ class NewCommand extends Command
         return $process->getExitCode();
     }
 
-    protected function installWordpress(string $name, string $directory, InputInterface $input, OutputInterface $output): void
+    protected function installWordpress(string $directory, string $name, InputInterface $input, OutputInterface $output): void
     {
         $db = str_replace('-', '_', strtolower($name));
 
@@ -242,7 +242,7 @@ class NewCommand extends Command
         );
     }
 
-    private function updateDeployScript(InputInterface $input, OutputInterface $output, string $directory, string $name)
+    private function updateDeployScript(string $directory, string $name, InputInterface $input, OutputInterface $output)
     {
         $helper = $this->getHelper('question');
 

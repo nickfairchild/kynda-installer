@@ -114,8 +114,8 @@ class NewCommand extends Command
 
         if ($url) {
             $this->replaceInFile(
-                "set('application', 'example');",
-                "set('application', '{$url}');",
+                "set('staging_url', 'example.test');",
+                "set('staging_url', '{$url}');",
                 $directory.'/deploy.php'
             );
         }

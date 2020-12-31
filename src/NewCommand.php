@@ -8,6 +8,8 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Question\Question;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Process;
 
 class NewCommand extends Command
@@ -56,25 +58,11 @@ class NewCommand extends Command
 
         if (($process = $this->runCommands($commands, $input, $output))->isSuccessful()) {
             if ($name !== '.') {
-                $this->replaceInFile(
-                    'DB_NAME=database_name',
-                    'DB_NAME='.str_replace('-', '_', strtolower($name)),
-                    $directory.'/.env'
-                );
+                $this->updateEnv($directory, $name);
 
-                $this->replaceInFile(
-                    'WP_HOME=http://localhost',
-                    'WP_HOME=http://'.$name.'.test',
-                    $directory.'/.env'
-                );
+                $this->updateDeployScript($input, $output, $directory, $name);
 
-                $this->replaceInFile(
-                    'DB_NAME=database_name',
-                    'DB_NAME='.str_replace('-', '_', strtolower($name)),
-                    $directory.'/.env.example'
-                );
-
-                $this->installWordpress($input, $output);
+                $this->installWordpress($input, $output, $name);
 
                 $this->setupTheme($name, $input, $output);
             }
@@ -85,9 +73,58 @@ class NewCommand extends Command
         return $process->getExitCode();
     }
 
-    protected function installWordpress(InputInterface $input, OutputInterface $output): void
+    protected function installWordpress(string $name, string $directory, InputInterface $input, OutputInterface $output): void
     {
+        $db = str_replace('-', '_', strtolower($name));
+
         $helper = $this->getHelper('question');
+
+        $userQuestion = new Question('Admin username?');
+        $userQuestion->setValidator(function ($value) {
+            if (trim($value) == '') {
+                throw new \Exception('The username cannot be empty');
+            }
+
+            return $value;
+        });
+        $userQuestion->setMaxAttempts(3);
+        $output->write(PHP_EOL);
+        $user = $helper->ask($input, new SymfonyStyle($input, $output), $userQuestion);
+
+        $emailQuestion = new Question('Admin email?');
+        $emailQuestion->setValidator(function ($value) {
+            if (trim($value) == '') {
+                throw new \Exception('The email cannot be empty');
+            }
+
+            return $value;
+        });
+        $emailQuestion->setMaxAttempts(3);
+        $output->write(PHP_EOL);
+        $email = $helper->ask($input, new SymfonyStyle($input, $output), $emailQuestion);
+
+        $passwordQuestion = new Question('Admin password?');
+        $passwordQuestion->setValidator(function ($value) {
+            if (trim($value) == '') {
+                throw new \Exception('The password cannot be empty');
+            }
+
+            return $value;
+        });
+        $passwordQuestion->setHidden(true);
+        $passwordQuestion->setHiddenFallback(false);
+        $passwordQuestion->setMaxAttempts(3);
+        $output->write(PHP_EOL);
+        $password = $helper->ask($input, new SymfonyStyle($input, $output), $passwordQuestion);
+
+        chdir($directory);
+
+        $commands = array_filter([
+            "mysql -uroot -e \"create database $db\"",
+            "wp core install --url=$name.test --title=$name --admin_user=$user --admin_password=$password --admin_email=$email --skip-email"
+        ]);
+
+        $this->runCommands($commands, $input, $output);
     }
 
     protected function setupTheme(string $directory, InputInterface $input, OutputInterface $output): void
@@ -176,5 +213,77 @@ class NewCommand extends Command
             $file,
             str_replace($search, $replace, file_get_contents($file))
         );
+    }
+
+    protected function updateEnv(string $directory, string $name): void
+    {
+        $this->replaceInFile(
+            'DB_NAME=database_name',
+            'DB_NAME='.str_replace('-', '_', strtolower($name)),
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'WP_HOME=http://localhost',
+            'WP_HOME=http://'.$name.'.test',
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'WP_DEFAULT_THEME=website',
+            'WP_DEFAULT_THEME='.$name,
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'DB_NAME=database_name',
+            'DB_NAME='.str_replace('-', '_', strtolower($name)),
+            $directory.'/.env.example'
+        );
+    }
+
+    private function updateDeployScript(InputInterface $input, OutputInterface $output, string $directory, string $name)
+    {
+        $helper = $this->getHelper('question');
+
+        $urlQuestion = new Question('What is the staging url?');
+
+        $output->write(PHP_EOL);
+
+        $url = $helper->ask($input, new SymfonyStyle($input, $output), $urlQuestion);
+
+        if ($url) {
+            $this->replaceInFile(
+                "set('application', 'example');",
+                "set('application', '{$url}');",
+                $directory.'/deploy.php'
+            );
+        }
+
+        $this->replaceInFile(
+            "set('local_url', 'example.test');",
+            "set('local_url', '{$name}.test');",
+            $directory.'/deploy.php'
+        );
+
+        $this->replaceInFile(
+            "set('site', 'website');",
+            "set('site', '{$name}');",
+            $directory.'/deploy.php'
+        );
+
+        $ipQuestion = new Question('What is the staging site IP?');
+
+        $output->write(PHP_EOL);
+
+        $ip = $helper->ask($input, new SymfonyStyle($input, $output), $ipQuestion);
+
+        if ($ip) {
+            $this->replaceInFile(
+                "set('ip', '127.0.0.1');",
+                "set('ip', '{$ip}');",
+                $directory.'/deploy.php'
+            );
+        }
     }
 }

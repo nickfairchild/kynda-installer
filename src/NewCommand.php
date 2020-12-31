@@ -62,7 +62,9 @@ class NewCommand extends Command
 
                 $this->updateDeployScript($directory, $name, $input, $output);
 
-                $this->installWordpress($directory, $name, $input, $output);
+                chdir($directory);
+
+                $this->installWordpress($name, $input, $output);
 
                 $this->setupTheme($name, $input, $output);
             }
@@ -73,13 +75,85 @@ class NewCommand extends Command
         return $process->getExitCode();
     }
 
-    protected function installWordpress(string $directory, string $name, InputInterface $input, OutputInterface $output): void
+    protected function updateEnv(string $directory, string $name): void
+    {
+        $this->replaceInFile(
+            'DB_NAME=database_name',
+            'DB_NAME='.str_replace('-', '_', strtolower($name)),
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'WP_HOME=http://localhost',
+            'WP_HOME=http://'.$name.'.test',
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'WP_DEFAULT_THEME=website',
+            'WP_DEFAULT_THEME='.$name,
+            $directory.'/.env'
+        );
+
+        $this->replaceInFile(
+            'DB_NAME=database_name',
+            'DB_NAME='.str_replace('-', '_', strtolower($name)),
+            $directory.'/.env.example'
+        );
+    }
+
+    private function updateDeployScript(string $directory, string $name, InputInterface $input, OutputInterface $output)
+    {
+        $helper = $this->getHelper('question');
+
+        $urlQuestion = new Question('What is the staging url? ');
+
+        $output->write(PHP_EOL);
+
+        $url = $helper->ask($input, new SymfonyStyle($input, $output), $urlQuestion);
+
+        if ($url) {
+            $this->replaceInFile(
+                "set('application', 'example');",
+                "set('application', '{$url}');",
+                $directory.'/deploy.php'
+            );
+        }
+
+        $this->replaceInFile(
+            "set('local_url', 'example.test');",
+            "set('local_url', '{$name}.test');",
+            $directory.'/deploy.php'
+        );
+
+        $this->replaceInFile(
+            "set('site', 'website');",
+            "set('site', '{$name}');",
+            $directory.'/deploy.php'
+        );
+
+        $ipQuestion = new Question('What is the staging site IP? ');
+
+        $output->write(PHP_EOL);
+
+        $ip = $helper->ask($input, new SymfonyStyle($input, $output), $ipQuestion);
+
+        if ($ip) {
+            $this->replaceInFile(
+                "set('ip', '127.0.0.1');",
+                "set('ip', '{$ip}');",
+                $directory.'/deploy.php'
+            );
+        }
+    }
+
+    protected function installWordpress(string $name, InputInterface $input, OutputInterface $output): void
     {
         $db = str_replace('-', '_', strtolower($name));
 
         $helper = $this->getHelper('question');
 
-        $userQuestion = new Question('Admin username?');
+        $userQuestion = new Question('Admin username? ');
         $userQuestion->setValidator(function ($value) {
             if (trim($value) == '') {
                 throw new \Exception('The username cannot be empty');
@@ -91,7 +165,7 @@ class NewCommand extends Command
         $output->write(PHP_EOL);
         $user = $helper->ask($input, new SymfonyStyle($input, $output), $userQuestion);
 
-        $emailQuestion = new Question('Admin email?');
+        $emailQuestion = new Question('Admin email? ');
         $emailQuestion->setValidator(function ($value) {
             if (trim($value) == '') {
                 throw new \Exception('The email cannot be empty');
@@ -103,7 +177,7 @@ class NewCommand extends Command
         $output->write(PHP_EOL);
         $email = $helper->ask($input, new SymfonyStyle($input, $output), $emailQuestion);
 
-        $passwordQuestion = new Question('Admin password?');
+        $passwordQuestion = new Question('Admin password? ');
         $passwordQuestion->setValidator(function ($value) {
             if (trim($value) == '') {
                 throw new \Exception('The password cannot be empty');
@@ -117,8 +191,6 @@ class NewCommand extends Command
         $output->write(PHP_EOL);
         $password = $helper->ask($input, new SymfonyStyle($input, $output), $passwordQuestion);
 
-        chdir($directory);
-
         $commands = array_filter([
             "mysql -uroot -e \"create database $db\"",
             "wp core install --url=$name.test --title=$name --admin_user=$user --admin_password=$password --admin_email=$email --skip-email"
@@ -129,8 +201,6 @@ class NewCommand extends Command
 
     protected function setupTheme(string $directory, InputInterface $input, OutputInterface $output): void
     {
-        chdir($directory);
-
         $commands = array_filter([
             "mv \"public/wp-content/themes/website\" \"public/wp-content/themes/$directory\"",
             "cd \"public/wp-content/themes/$directory\"",
@@ -213,77 +283,5 @@ class NewCommand extends Command
             $file,
             str_replace($search, $replace, file_get_contents($file))
         );
-    }
-
-    protected function updateEnv(string $directory, string $name): void
-    {
-        $this->replaceInFile(
-            'DB_NAME=database_name',
-            'DB_NAME='.str_replace('-', '_', strtolower($name)),
-            $directory.'/.env'
-        );
-
-        $this->replaceInFile(
-            'WP_HOME=http://localhost',
-            'WP_HOME=http://'.$name.'.test',
-            $directory.'/.env'
-        );
-
-        $this->replaceInFile(
-            'WP_DEFAULT_THEME=website',
-            'WP_DEFAULT_THEME='.$name,
-            $directory.'/.env'
-        );
-
-        $this->replaceInFile(
-            'DB_NAME=database_name',
-            'DB_NAME='.str_replace('-', '_', strtolower($name)),
-            $directory.'/.env.example'
-        );
-    }
-
-    private function updateDeployScript(string $directory, string $name, InputInterface $input, OutputInterface $output)
-    {
-        $helper = $this->getHelper('question');
-
-        $urlQuestion = new Question('What is the staging url?');
-
-        $output->write(PHP_EOL);
-
-        $url = $helper->ask($input, new SymfonyStyle($input, $output), $urlQuestion);
-
-        if ($url) {
-            $this->replaceInFile(
-                "set('application', 'example');",
-                "set('application', '{$url}');",
-                $directory.'/deploy.php'
-            );
-        }
-
-        $this->replaceInFile(
-            "set('local_url', 'example.test');",
-            "set('local_url', '{$name}.test');",
-            $directory.'/deploy.php'
-        );
-
-        $this->replaceInFile(
-            "set('site', 'website');",
-            "set('site', '{$name}');",
-            $directory.'/deploy.php'
-        );
-
-        $ipQuestion = new Question('What is the staging site IP?');
-
-        $output->write(PHP_EOL);
-
-        $ip = $helper->ask($input, new SymfonyStyle($input, $output), $ipQuestion);
-
-        if ($ip) {
-            $this->replaceInFile(
-                "set('ip', '127.0.0.1');",
-                "set('ip', '{$ip}');",
-                $directory.'/deploy.php'
-            );
-        }
     }
 }
